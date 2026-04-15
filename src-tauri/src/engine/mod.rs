@@ -42,6 +42,7 @@ pub struct RunOutcome {
 }
 static CLICK_COUNT: AtomicI64 = AtomicI64::new(0);
 
+#[cfg(target_family = "windows")]
 #[link(name = "ntdll")]
 extern "system" {
     fn NtSetTimerResolution(

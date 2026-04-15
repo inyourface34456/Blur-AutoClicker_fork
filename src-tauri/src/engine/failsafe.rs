@@ -1,9 +1,14 @@
 use super::mouse::current_screen_size;
 use super::ClickerConfig;
+#[cfg(target_family = "windows")]
 use windows_sys::Win32::Foundation::POINT;
+#[cfg(target_family = "windows")]
 use windows_sys::Win32::UI::WindowsAndMessaging::GetCursorPos;
+#[cfg(target_family = "unix")]
+use enigo::{Enigo, Settings, Mouse};
 
 pub fn should_stop_for_failsafe(config: &ClickerConfig) -> Option<String> {
+    #[cfg(target_family = "windows")]
     pub fn current_cursor_position() -> Option<(i32, i32)> {
         let mut point = POINT { x: 0, y: 0 };
         let ok = unsafe { GetCursorPos(&mut point) };
@@ -12,6 +17,11 @@ pub fn should_stop_for_failsafe(config: &ClickerConfig) -> Option<String> {
         } else {
             Some((point.x, point.y))
         }
+    }
+    #[cfg(target_family = "unix")]
+    pub fn current_cursor_position() -> Option<(i32, i32)> {
+       let mouse = Enigo::new(&Settings::default()).unwrap();
+       mouse.location().ok()
     }
 
     let cursor = current_cursor_position()?;

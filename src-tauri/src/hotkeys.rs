@@ -3,7 +3,13 @@ use crate::ClickerState;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tauri::Manager;
+#[cfg(target_family = "windows")]
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
+
+#[cfg(target_family = "unix")]
+use crate::windows_conts::*;
+#[cfg(target_family = "unix")]
+use device_query::{DeviceQuery, DeviceState};
 
 use crate::engine::worker::now_epoch_ms;
 use crate::engine::worker::start_clicker_inner;
@@ -298,6 +304,132 @@ pub fn is_hotkey_binding_pressed(binding: &HotkeyBinding) -> bool {
     is_vk_down(binding.main_vk)
 }
 
+#[cfg(target_family = "windows")]
 pub fn is_vk_down(vk: i32) -> bool {
     unsafe { (GetAsyncKeyState(vk) as u16 & 0x8000) != 0 }
+}
+
+#[cfg(target_family = "unix")]
+pub fn is_vk_down(vk: i32) -> bool {
+    thread_local! {
+        static DEVICE: DeviceState = DeviceState::new();
+    }
+
+    let keycodes = vk_to_keycodes(vk);
+    if keycodes.is_empty() {
+        return false;
+    }
+    DEVICE.with(|state| {
+        let keys = state.get_keys();
+        keycodes.iter().any(|k| keys.contains(k))
+    })
+}
+
+#[cfg(target_family = "unix")]
+fn vk_to_keycodes(vk: i32) -> &'static [device_query::Keycode] {
+    use device_query::Keycode as K;
+    match vk as u16 {
+        // Generic modifiers (either side)
+        VK_CONTROL => &[K::LControl, K::RControl],
+        VK_MENU => &[K::LAlt, K::RAlt],
+        VK_SHIFT => &[K::LShift, K::RShift],
+        // Specific modifiers
+        VK_LCONTROL => &[K::LControl],
+        VK_RCONTROL => &[K::RControl],
+        VK_LSHIFT => &[K::LShift],
+        VK_RSHIFT => &[K::RShift],
+        VK_LMENU => &[K::LAlt],
+        VK_RMENU => &[K::RAlt],
+        VK_LWIN => &[K::LMeta],
+        VK_RWIN => &[K::RMeta],
+        // Letters A-Z (VK 0x41-0x5A)
+        0x41 => &[K::A],
+        0x42 => &[K::B],
+        0x43 => &[K::C],
+        0x44 => &[K::D],
+        0x45 => &[K::E],
+        0x46 => &[K::F],
+        0x47 => &[K::G],
+        0x48 => &[K::H],
+        0x49 => &[K::I],
+        0x4A => &[K::J],
+        0x4B => &[K::K],
+        0x4C => &[K::L],
+        0x4D => &[K::M],
+        0x4E => &[K::N],
+        0x4F => &[K::O],
+        0x50 => &[K::P],
+        0x51 => &[K::Q],
+        0x52 => &[K::R],
+        0x53 => &[K::S],
+        0x54 => &[K::T],
+        0x55 => &[K::U],
+        0x56 => &[K::V],
+        0x57 => &[K::W],
+        0x58 => &[K::X],
+        0x59 => &[K::Y],
+        0x5A => &[K::Z],
+        // Digits 0-9 (VK 0x30-0x39)
+        0x30 => &[K::Key0],
+        0x31 => &[K::Key1],
+        0x32 => &[K::Key2],
+        0x33 => &[K::Key3],
+        0x34 => &[K::Key4],
+        0x35 => &[K::Key5],
+        0x36 => &[K::Key6],
+        0x37 => &[K::Key7],
+        0x38 => &[K::Key8],
+        0x39 => &[K::Key9],
+        // F-keys
+        VK_F1 => &[K::F1],
+        VK_F2 => &[K::F2],
+        VK_F3 => &[K::F3],
+        VK_F4 => &[K::F4],
+        VK_F5 => &[K::F5],
+        VK_F6 => &[K::F6],
+        VK_F7 => &[K::F7],
+        VK_F8 => &[K::F8],
+        VK_F9 => &[K::F9],
+        VK_F10 => &[K::F10],
+        VK_F11 => &[K::F11],
+        VK_F12 => &[K::F12],
+        VK_F13 => &[K::F13],
+        VK_F14 => &[K::F14],
+        VK_F15 => &[K::F15],
+        VK_F16 => &[K::F16],
+        VK_F17 => &[K::F17],
+        VK_F18 => &[K::F18],
+        VK_F19 => &[K::F19],
+        VK_F20 => &[K::F20],
+        // Navigation
+        VK_SPACE => &[K::Space],
+        VK_RETURN => &[K::Enter],
+        VK_TAB => &[K::Tab],
+        VK_BACK => &[K::Backspace],
+        VK_ESCAPE => &[K::Escape],
+        VK_DELETE => &[K::Delete],
+        VK_INSERT => &[K::Insert],
+        VK_HOME => &[K::Home],
+        VK_END => &[K::End],
+        VK_PRIOR => &[K::PageUp],
+        VK_NEXT => &[K::PageDown],
+        VK_UP => &[K::Up],
+        VK_DOWN => &[K::Down],
+        VK_LEFT => &[K::Left],
+        VK_RIGHT => &[K::Right],
+        VK_CAPITAL => &[K::CapsLock],
+        // Punctuation (OEM keys)
+        VK_OEM_COMMA => &[K::Comma],
+        VK_OEM_PERIOD => &[K::Dot],
+        VK_OEM_2 => &[K::Slash],
+        VK_OEM_1 => &[K::Semicolon],
+        VK_OEM_7 => &[K::Apostrophe],
+        VK_OEM_4 => &[K::LeftBracket],
+        VK_OEM_6 => &[K::RightBracket],
+        VK_OEM_5 => &[K::BackSlash],
+        VK_OEM_3 => &[K::Grave],
+        VK_OEM_MINUS => &[K::Minus],
+        VK_OEM_PLUS => &[K::Equal],
+        _ => &[],
+    }
 }

@@ -1,19 +1,32 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-
+#[cfg(target_family = "windows")]
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, INPUT, INPUT_MOUSE, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP,
     MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP,
     MOUSEINPUT,
 };
+#[cfg(target_family = "windows")]
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     GetSystemMetrics, SetCursorPos, SM_CXSCREEN, SM_CYSCREEN,
 };
+#[cfg(target_family = "unix")]
+use enigo::{Enigo, Settings, Mouse, Button, Direction};
+#[cfg(target_family = "unix")]
+use winit::event_loop::EventLoop;
+
+pub const LEFTDOWN: u32 = 0x0002;
+pub const LEFTUP: u32 = 0x0004;
+pub const RIGHTDOWN: u32 = 0x0008;
+pub const RIGHTUP: u32 = 0x0010;
+pub const MIDDLEDOWN: u32 = 0x0020;
+pub const MIDDLEUP: u32 = 0x0040;
 
 use super::rng::SmallRng;
 use super::sleep_interruptible;
 
+#[cfg(target_family = "windows")]
 pub fn current_cursor_position() -> Option<(i32, i32)> {
     use windows_sys::Win32::Foundation::POINT;
     use windows_sys::Win32::UI::WindowsAndMessaging::GetCursorPos;
@@ -26,15 +39,45 @@ pub fn current_cursor_position() -> Option<(i32, i32)> {
         Some((point.x, point.y))
     }
 }
+#[cfg(target_family = "unix")]
+pub fn current_cursor_position() -> Option<(i32, i32)> {
+    let mouse = Enigo::new(&Settings::default()).unwrap();
+    mouse.location().ok()
+}
 
 pub fn current_screen_size() -> Option<(i32, i32)> {
+    #[cfg(target_family = "windows")]
     let width = unsafe { GetSystemMetrics(SM_CXSCREEN) };
+    #[cfg(target_family = "windows")]
     let height = unsafe { GetSystemMetrics(SM_CYSCREEN) };
+    
+    #[cfg(target_family = "unix")]
+    let (width, height) = {
+        let screen = Enigo::new(&Settings::default()).unwrap();
+        screen.main_display().unwrap()
+    };
+    
     if width <= 0 || height <= 0 {
         return None;
-    }
-    use windows_sys::Win32::UI::HiDpi::GetDpiForSystem;
-    let dpi = unsafe { GetDpiForSystem() };
+    };
+    
+    #[cfg(target_family = "windows")]
+    let dpi = {
+        use windows_sys::Win32::UI::HiDpi::GetDpiForSystem;
+        unsafe { GetDpiForSystem() }
+    };
+    #[cfg(target_family = "unix")]
+    let dpi = {
+        let event_loop = EventLoop::new().unwrap();
+        let monitor = event_loop.primary_monitor();
+    
+        match monitor {
+            Some(m) => (m.scale_factor() * 96.0) as u32,
+            None => 96,
+        }
+        // 96
+    };
+    
     let scale = dpi as f64 / 96.0;
 
     Some((
@@ -50,9 +93,14 @@ pub fn get_cursor_pos() -> (i32, i32) {
 
 #[inline]
 pub fn move_mouse(x: i32, y: i32) {
+    #[cfg(target_family = "windows")]
     unsafe { SetCursorPos(x, y) };
+    #[cfg(target_family = "unix")]
+    let mut mouse = Enigo::new(&Settings::default()).unwrap();
+    mouse.move_mouse(x, y, enigo::Coordinate::Abs);
 }
 
+#[cfg(target_family = "windows")]
 #[inline]
 pub fn make_input(flags: u32, time: u32) -> INPUT {
     INPUT {
@@ -70,12 +118,43 @@ pub fn make_input(flags: u32, time: u32) -> INPUT {
     }
 }
 
+#[cfg(target_family = "unix")]
+#[inline]
+pub fn make_input(flags: u32, _time: u32) -> (Button, Direction) {
+    let button = if flags & (RIGHTDOWN | RIGHTUP) != 0 {
+        Button::Right
+    } else if flags & (MIDDLEDOWN | MIDDLEUP) != 0 {
+        Button::Middle
+    } else {
+        Button::Left
+    };
+
+    let direction = if flags & (LEFTDOWN | RIGHTDOWN | MIDDLEDOWN) != 0 {
+        Direction::Press
+    } else {
+        Direction::Release
+    };
+
+    (button, direction)
+}
+
+#[cfg(target_family = "windows")]
 #[inline]
 pub fn send_mouse_event(flags: u32) {
     let input = make_input(flags, 0);
     unsafe { SendInput(1, &input, std::mem::size_of::<INPUT>() as i32) };
 }
 
+#[cfg(target_family = "unix")]
+#[inline]
+pub fn send_mouse_event(flags: u32) {
+    let (button, direction) = make_input(flags, 0);
+
+    let mut enigo = Enigo::new(&Settings::default()).unwrap();
+    enigo.button(button, direction);
+}
+
+#[cfg(target_family = "windows")]
 pub fn send_batch(down: u32, up: u32, n: usize, _hold_ms: u32) {
     let mut inputs: Vec<INPUT> = Vec::with_capacity(n * 2);
     for _ in 0..n {
@@ -89,6 +168,44 @@ pub fn send_batch(down: u32, up: u32, n: usize, _hold_ms: u32) {
             std::mem::size_of::<INPUT>() as i32,
         )
     };
+}
+
+#[cfg(target_family = "unix")]
+pub fn send_batch(down: u32, up: u32, n: usize, _hold_ms: u32) {
+    let mut enigo = Enigo::new(&Settings::default()).unwrap();
+
+    let (btn_down, dir_down) = make_input(down, 0);
+    let (btn_up, dir_up) = make_input(up, 0);
+
+    for _ in 0..n {
+        enigo.button(btn_down, dir_down);
+        enigo.button(btn_up, dir_up);
+    }
+}
+
+#[cfg(target_family = "windows")]
+#[inline]
+pub fn get_button_flags(button: i32) -> (u32, u32) {
+    match button {
+        2 => (MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP),
+        3 => (MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP),
+        _ => (MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP),
+    }
+}
+
+#[cfg(target_family = "unix")]
+#[inline]
+pub fn get_button_flags(button: i32) -> (u32, u32) {
+    match button {
+        // right click
+        2 => (RIGHTDOWN, RIGHTUP),
+
+        // middle click
+        3 => (MIDDLEDOWN, MIDDLEUP),
+
+        // default = left click
+        _ => (LEFTDOWN, LEFTUP),
+    }
 }
 
 pub fn send_clicks(
@@ -123,15 +240,6 @@ pub fn send_clicks(
         if index + 1 < count && use_double_click_gap && double_click_delay_ms > 0 {
             sleep_interruptible(Duration::from_millis(double_click_delay_ms as u64), running);
         }
-    }
-}
-
-#[inline]
-pub fn get_button_flags(button: i32) -> (u32, u32) {
-    match button {
-        2 => (MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP),
-        3 => (MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP),
-        _ => (MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP),
     }
 }
 

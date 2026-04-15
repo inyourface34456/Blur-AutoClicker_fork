@@ -6,6 +6,7 @@ mod hotkeys;
 mod overlay;
 mod ui_commands;
 mod updates;
+mod windows_conts;
 
 use crate::app_state::ClickerState;
 use crate::app_state::ClickerStatusPayload;
@@ -83,7 +84,15 @@ pub fn run() {
             start_hotkey_listener(handle.clone());
             register_hotkey_inner(&handle, initial_hotkey).map_err(std::io::Error::other)?;
             emit_status(&handle);
+
+            // On Linux/GTK, the overlay window starts hidden (visible: false) so the
+            // underlying GDK window is never realized. tao panics if we call
+            // set_ignore_cursor_events on an unrealized window. The fullscreen and
+            // decoration settings are already applied from tauri.conf.json, and the
+            // Win32 styles only matter on Windows, so we skip init entirely on Linux.
+            #[cfg(target_os = "windows")]
             overlay::init_overlay(app.handle())?;
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
