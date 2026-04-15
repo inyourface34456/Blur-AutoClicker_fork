@@ -1,6 +1,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use crate::engine::wayland_dpi::get_wayland_dpi;
 #[cfg(target_family = "windows")]
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, INPUT, INPUT_MOUSE, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP,
@@ -13,8 +14,6 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 };
 #[cfg(target_family = "unix")]
 use enigo::{Enigo, Settings, Mouse, Button, Direction};
-#[cfg(target_family = "unix")]
-use winit::event_loop::EventLoop;
 
 pub const LEFTDOWN: u32 = 0x0002;
 pub const LEFTUP: u32 = 0x0004;
@@ -45,6 +44,15 @@ pub fn current_cursor_position() -> Option<(i32, i32)> {
     mouse.location().ok()
 }
 
+fn get_x11_dpi() -> Result<f64, String> {
+    use x11rb::connection::Connection;
+    use x11rb::rust_connection::RustConnection;
+    let (conn, screen_num) = RustConnection::connect(None).map_err(|e| e.to_string())?;
+    let screen = &conn.setup().roots[screen_num];
+    let dpi = (screen.width_in_pixels as f64 / screen.width_in_millimeters as f64) * 25.4;
+    Ok(dpi)
+}
+
 pub fn current_screen_size() -> Option<(i32, i32)> {
     #[cfg(target_family = "windows")]
     let width = unsafe { GetSystemMetrics(SM_CXSCREEN) };
@@ -68,12 +76,10 @@ pub fn current_screen_size() -> Option<(i32, i32)> {
     };
     #[cfg(target_family = "unix")]
     let dpi = {
-        let event_loop = EventLoop::new().unwrap();
-        let monitor = event_loop.primary_monitor();
-    
-        match monitor {
-            Some(m) => (m.scale_factor() * 96.0) as u32,
-            None => 96,
+        if std::env::var("WAYLAND_DISPLAY").is_ok() {
+            get_wayland_dpi().unwrap_or(96.0)
+        } else {
+            get_x11_dpi().unwrap_or(96.0)
         }
         // 96
     };

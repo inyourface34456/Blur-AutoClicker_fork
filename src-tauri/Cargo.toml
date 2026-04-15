@@ -38,4 +38,5 @@ windows-targets = "0.48"
 [target.'cfg(target_os = "linux")'.dependencies]
 device_query = "4.0.1"
 enigo = "0.3.0"
-winit = { version = "0.29", default-features = false, features = ["x11", "wayland"] }
+x11rb = "0.13"
+wayland-client = "0.31"

@@ -3,6 +3,7 @@ pub mod mouse;
 pub mod rng;
 pub mod stats;
 pub mod worker;
+pub mod wayland_dpi;
 use std::sync::atomic::AtomicI64;
 pub use worker::{sleep_interruptible, start_clicker};
 
