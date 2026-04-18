@@ -422,7 +422,7 @@ export default function AdvancedPanelLayout({
               </div>
             </div>
 
-            <div className="sectioncontainer">
+            <div className="sectioncontainer adv-basic-card">
               <div className="adv-card-header">
                 <span className="adv-card-title">{t("advanced.dutyCycle")}</span>
                 <div className="adv-row" style={{ gap: 6 }}>
@@ -439,15 +439,12 @@ export default function AdvancedPanelLayout({
                   </div>
                 </div>
               </div>
-              <CardDivider />
               {showDesc("advanced.dutyCycleDescription")}
             </div>
 
-            <div className="sectioncontainer">
+            <div className="sectioncontainer adv-basic-card">
               <div className="adv-card-header">
-                <span className="adv-card-title">
-                  {t("advanced.speedVariation")}
-                </span>
+                <span className="adv-card-title">{t("advanced.speedVariation")}</span>
                 <div className="adv-row" style={{ gap: 8 }}>
                   <Disableable enabled={settings.speedVariationEnabled}>
                     <div className="adv-numbox-sm">
@@ -467,37 +464,15 @@ export default function AdvancedPanelLayout({
                 </div>
               </div>
               <Disableable enabled={settings.speedVariationEnabled}>
-                <CardDivider />
-
                 {showDesc("advanced.speedVariationDescription")}
               </Disableable>
             </div>
 
-            <div className="sectioncontainer">
+            <div className="sectioncontainer adv-basic-card">
               <div className="adv-card-header">
                 <span className="adv-card-title">{t("advanced.doubleClick")}</span>
-                <ToggleBtn
-                  value={settings.doubleClickEnabled}
-                  onChange={(v) => update({ doubleClickEnabled: v })}
-                  disabled={getMaxDoubleClickDelayMs(settings) <= 20}
-                />
-              </div>
-              <CardDivider />
-              <Disableable enabled={settings.doubleClickEnabled}>
                 <div className="adv-row" style={{ gap: 8 }}>
-                  {showExplanations && (
-                    <p className="adv-desc">
-                      {t("advanced.doubleClickDescription")}
-                    </p>
-                  )}
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      gap: 4,
-                    }}
-                  >
+                  <Disableable enabled={settings.doubleClickEnabled}>
                     <div className="adv-numbox-sm">
                       <NumInput
                         value={settings.doubleClickDelay}
@@ -507,7 +482,50 @@ export default function AdvancedPanelLayout({
                       />
                       <span className="adv-unit">ms</span>
                     </div>
-                    <span className="adv-label-sm">{t("advanced.delay")}</span>
+                  </Disableable>
+                  <ToggleBtn
+                    value={settings.doubleClickEnabled}
+                    onChange={(v) => update({ doubleClickEnabled: v })}
+                    disabled={getMaxDoubleClickDelayMs(settings) <= 20}
+                  />
+                </div>
+              </div>
+              <Disableable enabled={settings.doubleClickEnabled}>
+                {showDesc("advanced.doubleClickDescription")}
+              </Disableable>
+            </div>
+
+            <div className="sectioncontainer">
+              <div className="adv-card-header">
+                <span className="adv-card-title">{t("advanced.sequenceClicking")}</span>
+                <ToggleBtn
+                  value={settings.sequenceEnabled}
+                  onChange={(v) =>
+                    update({
+                      sequenceEnabled: v,
+                      positionEnabled: v ? false : settings.positionEnabled,
+                    })
+                  }
+                />
+              </div>
+              <CardDivider />
+              <Disableable enabled={settings.sequenceEnabled}>
+                <div className="adv-sequence-body">
+                  {showExplanations && (
+                    <p className="adv-desc">
+                      {t("advanced.sequenceClickingDescription")}
+                    </p>
+                  )}
+                  <div className="adv-sequence-controls">
+                    <div className="adv-sequence-toolbar">
+                      <ActionButton
+                        onClick={addCurrentCursorToSequence}
+                        disabled={capturingCursor}
+                      >
+                        {t("advanced.sequenceAddCurrentCursor")}
+                      </ActionButton>
+                    </div>
+                    {renderSequencePoints()}
                   </div>
                 </div>
               </Disableable>
@@ -737,42 +755,6 @@ export default function AdvancedPanelLayout({
                           ? t("advanced.picking")
                           : t("advanced.pick")}
                     </button>
-                  </div>
-                </div>
-              </Disableable>
-            </div>
-
-            <div className="sectioncontainer">
-              <div className="adv-card-header">
-                <span className="adv-card-title">{t("advanced.sequenceClicking")}</span>
-                <ToggleBtn
-                  value={settings.sequenceEnabled}
-                  onChange={(v) =>
-                    update({
-                      sequenceEnabled: v,
-                      positionEnabled: v ? false : settings.positionEnabled,
-                    })
-                  }
-                />
-              </div>
-              <CardDivider />
-              <Disableable enabled={settings.sequenceEnabled}>
-                <div className="adv-sequence-body">
-                  {showExplanations && (
-                    <p className="adv-desc">
-                      {t("advanced.sequenceClickingDescription")}
-                    </p>
-                  )}
-                  <div className="adv-sequence-controls">
-                    <div className="adv-sequence-toolbar">
-                      <ActionButton
-                        onClick={addCurrentCursorToSequence}
-                        disabled={capturingCursor}
-                      >
-                        {t("advanced.sequenceAddCurrentCursor")}
-                      </ActionButton>
-                    </div>
-                    {renderSequencePoints()}
                   </div>
                 </div>
               </Disableable>

@@ -131,8 +131,8 @@
 }
 
 .settings-btn-primary {
-  background: var(--accent-green-soft);
-  border: 1px solid var(--accent-green-ring);
+  background: transparent;
+  border: 1px solid var(--border-subtle);
   color: var(--accent-green-strong);
 }
 
@@ -320,7 +320,8 @@
 }
 
 .preset-badge--active {
-  background: var(--accent-green-soft);
+  background: transparent;
+  border: 1px solid var(--accent-green-ring);
   color: var(--accent-green-strong);
 }
 

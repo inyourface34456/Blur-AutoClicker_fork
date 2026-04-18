@@ -800,14 +800,9 @@ export default function SettingsPanel({
           </div>
           <button
             className="settings-btn-danger"
-            onClick={() => {
-              setResetting(true);
-              onReset()
-                .then(() => setAutostartEnabled(false))
-                .finally(() => setResetting(false));
-            }}
+            onClick={() => setPendingAction("reset-settings")}
           >
-            {resetting ? t("common.resetting") : t("common.reset")}
+            {t("common.reset")}
           </button>
         </div>
       </div>
