@@ -52,11 +52,9 @@
 
 .settings-section-title {
   font-family: var(--font-family-base);
-  font-size: 0.6875rem;
-  font-weight: var(--font-weight-hv);
-  letter-spacing: 0;
-  text-transform: uppercase;
-  color: var(--accent-green-strong);
+  font-size: 0.75rem;
+  font-weight: var(--font-weight-li);
+  color: var(--text-muted);
 }
 
 .settings-section-description {
@@ -441,7 +439,6 @@
   padding: 0.25rem 0 0.5rem;
 }
 
-
 .stats-cell {
   display: flex;
   flex-direction: column;
@@ -473,10 +470,32 @@
   margin-top: 0.25rem;
 }
 
-
 .stats-empty {
   font-size: 0.75rem;
   color: var(--text-dim);
   padding: 0.75rem 0;
   text-align: center;
+}
+
+.settings-row .adv-dropdown-trigger {
+  box-sizing: border-box;
+  height: 30px;
+  padding: 0 0.5rem 0 0.5rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-family: var(--font-family-base);
+  font-size: 0.875rem;
+  font-weight: var(--font-weight-md);
+  transition: border-color 0.15s ease;
+}
+
+.settings-row .adv-dropdown-trigger:hover {
+  border-color: var(--border-focus);
+}
+
+.settings-row .adv-dropdown-menu {
+  border-radius: var(--radius-md);
+  min-width: max-content;
 }
