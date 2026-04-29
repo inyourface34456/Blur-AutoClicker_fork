@@ -51,15 +51,15 @@
 }
 
 [data-theme="light"] {
-  --bg-base:       rgb(218, 218, 236);
+  --bg-base:       rgb(229, 223, 231);
   --bg-surface:    hsl(0, 0%, 100%);
   --bg-elevated:   hsl(0, 0%, 95%);
   --bg-input:      hsl(0, 0%, 85%);
   --bg-input-off:  hsl(0, 0%, 85%);
 
-  --border:        hsl(0, 0%, 50%);
-  --border-focus:  hsl(0, 0%, 45%);
-  --border-subtle: hsl(0, 0%, 75%);
+  --border:        hsl(0, 0%, 40%);
+  --border-focus:  hsl(0, 0%, 35%);
+  --border-subtle: hsl(0, 0%, 65%);
 
   --text-primary:  hsla(0, 0%, 0%, 1);
   --text-muted:    hsla(0, 0%, 0%, 0.85);
@@ -76,8 +76,8 @@
 
   --container-shadow: none;
 
-  --font-weight-li: 600;
-  --font-weight-md: 700;
+  --font-weight-li: 400;
+  --font-weight-md: 600;
   --font-weight-hv: 800;
 
   --divider-color: rgba(0, 0, 0, 0.18);

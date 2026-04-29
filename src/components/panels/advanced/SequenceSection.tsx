@@ -17,9 +17,6 @@ import {
   InfoIcon,
 } from "./shared";
 
-// TODO: Needs to have a timer before picking the location of the cursor. say 3 seconds. In the future I would like an overlay approach to this but for now this is good enough.
-
-
 interface Props {
   settings: Settings;
   update: (patch: Partial<Settings>) => void;
@@ -88,6 +85,7 @@ export default function SequenceSection({
   const [capturingCursor, setCapturingCursor] = useState(false);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [showBottomFade, setShowBottomFade] = useState(false);
+  const [countdown, setCountdown] = useState<number | null>(null);
   const listViewportRef = useRef<HTMLDivElement | null>(null);
   const itemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const latestPointsRef = useRef(settings.sequencePoints);
@@ -101,6 +99,47 @@ export default function SequenceSection({
     } finally {
       setCapturingCursor(false);
     }
+  };
+
+  useEffect(() => {
+    if (countdown === null || countdown < 0) return;
+
+    const timer = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev === null || prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [countdown]);
+
+  useEffect(() => {
+    if (countdown !== 0) return;
+
+    const captureAfterCountdown = async () => {
+      try {
+        const point = await requestCursorPosition();
+        update({
+          sequenceEnabled: true,
+          sequencePoints: [
+            ...settings.sequencePoints,
+            { id: createSequencePointId(), ...point, clicks: 1 },
+          ],
+        });
+      } finally {
+        setCountdown(null);
+      }
+    };
+
+    void captureAfterCountdown();
+  }, [countdown, requestCursorPosition, settings.sequencePoints, update]);
+
+  const addCurrentCursorToSequence = async () => {
+    setCountdown(4);
   };
 
   const updateSequencePoint = (
@@ -119,17 +158,6 @@ export default function SequenceSection({
       (_: SequencePoint, pointIndex: number) => pointIndex !== index,
     );
     update({ sequencePoints: nextPoints });
-  };
-
-  const addCurrentCursorToSequence = async () => {
-    const point = await requestCursorPosition();
-    update({
-      sequenceEnabled: true,
-      sequencePoints: [
-        ...settings.sequencePoints,
-        { id: createSequencePointId(), ...point, clicks: 1 },
-      ],
-    });
   };
 
   const updateBottomFade = useCallback(() => {
@@ -156,38 +184,41 @@ export default function SequenceSection({
     [update],
   );
 
-  const computeInsertionIndex = useCallback((clientY: number, draggedId: string) => {
-    const orderedPoints = latestPointsRef.current.filter(
-      (point) => point.id !== draggedId,
-    );
-
-    if (orderedPoints.length === 0) {
-      return 0;
-    }
-
-    const measuredPoints = orderedPoints
-      .map((point) => ({
-        point,
-        rect: itemRefs.current.get(point.id)?.getBoundingClientRect() ?? null,
-      }))
-      .filter(
-        (entry): entry is { point: SequencePoint; rect: DOMRect } =>
-          entry.rect !== null,
+  const computeInsertionIndex = useCallback(
+    (clientY: number, draggedId: string) => {
+      const orderedPoints = latestPointsRef.current.filter(
+        (point) => point.id !== draggedId,
       );
 
-    if (measuredPoints.length === 0) {
-      return orderedPoints.length;
-    }
-
-    for (let index = 0; index < measuredPoints.length; index += 1) {
-      const { rect } = measuredPoints[index];
-      if (clientY < rect.top + rect.height / 2) {
-        return index;
+      if (orderedPoints.length === 0) {
+        return 0;
       }
-    }
 
-    return measuredPoints.length;
-  }, []);
+      const measuredPoints = orderedPoints
+        .map((point) => ({
+          point,
+          rect: itemRefs.current.get(point.id)?.getBoundingClientRect() ?? null,
+        }))
+        .filter(
+          (entry): entry is { point: SequencePoint; rect: DOMRect } =>
+            entry.rect !== null,
+        );
+
+      if (measuredPoints.length === 0) {
+        return orderedPoints.length;
+      }
+
+      for (let index = 0; index < measuredPoints.length; index += 1) {
+        const { rect } = measuredPoints[index];
+        if (clientY < rect.top + rect.height / 2) {
+          return index;
+        }
+      }
+
+      return measuredPoints.length;
+    },
+    [],
+  );
 
   const updateDragOrder = useCallback(
     (clientY: number) => {
@@ -201,9 +232,15 @@ export default function SequenceSection({
         const rect = viewport.getBoundingClientRect();
         const edgeThreshold = 40;
         if (clientY < rect.top + edgeThreshold) {
-          viewport.scrollTop -= Math.max(6, (rect.top + edgeThreshold - clientY) * 0.25);
+          viewport.scrollTop -= Math.max(
+            6,
+            (rect.top + edgeThreshold - clientY) * 0.25,
+          );
         } else if (clientY > rect.bottom - edgeThreshold) {
-          viewport.scrollTop += Math.max(6, (clientY - (rect.bottom - edgeThreshold)) * 0.25);
+          viewport.scrollTop += Math.max(
+            6,
+            (clientY - (rect.bottom - edgeThreshold)) * 0.25,
+          );
         }
       }
 
@@ -298,7 +335,9 @@ export default function SequenceSection({
       updateBottomFade();
     };
 
-    window.addEventListener("pointermove", handlePointerMove, { passive: true });
+    window.addEventListener("pointermove", handlePointerMove, {
+      passive: true,
+    });
     window.addEventListener("pointerup", finishDrag);
     window.addEventListener("pointercancel", finishDrag);
     return () => {
@@ -332,7 +371,7 @@ export default function SequenceSection({
           value={settings.sequenceEnabled}
           onChange={(v) =>
             update({
-              sequenceEnabled: v
+              sequenceEnabled: v,
             })
           }
         />
@@ -341,18 +380,20 @@ export default function SequenceSection({
       <Disableable enabled={settings.sequenceEnabled}>
         <div className="adv-sequence-body">
           <div className="adv-sequence-controls">
-            <div className="adv-sequence-toolbar">
-              <button
-                type="button"
-                className="adv-secondary-btn"
-                onClick={() => {
-                  void addCurrentCursorToSequence();
-                }}
-                disabled={capturingCursor}
-              >
-                {t("advanced.sequenceAddCurrentCursor")}
-              </button>
-            </div>
+            <button
+              type="button"
+              className="adv-secondary-btn"
+              onClick={() => {
+                void addCurrentCursorToSequence();
+              }}
+              disabled={capturingCursor || countdown !== null}
+            >
+              {countdown !== null
+                ? countdown === 0
+                  ? t("advanced.sequenceCapturing")
+                  : `${t("advanced.sequenceAddingIn")} ${countdown}...`
+                : t("advanced.sequenceAddCurrentCursor")}
+            </button>
             <div className="adv-sequence-list-shell">
               <div ref={listViewportRef} className="adv-sequence-list">
                 {settings.sequencePoints.length === 0 ? (
@@ -369,130 +410,136 @@ export default function SequenceSection({
                       );
 
                       return (
-                      <div
-                        key={point.id}
-                        ref={(node) => {
-                          if (node) {
-                            itemRefs.current.set(point.id, node);
-                          } else {
-                            itemRefs.current.delete(point.id);
+                        <div
+                          key={point.id}
+                          ref={(node) => {
+                            if (node) {
+                              itemRefs.current.set(point.id, node);
+                            } else {
+                              itemRefs.current.delete(point.id);
+                            }
+                          }}
+                          className={`adv-sequence-item ${
+                            draggingId === point.id
+                              ? "adv-sequence-item--dragging"
+                              : ""
+                          } ${isActive ? "adv-sequence-item--active" : ""}`}
+                          style={
+                            isActive
+                              ? ({
+                                  "--sequence-step-duration": `${stepDurationMs}ms`,
+                                  "--sequence-step-clicks": point.clicks,
+                                } as CSSProperties)
+                              : undefined
                           }
-                        }}
-                        className={`adv-sequence-item ${
-                          draggingId === point.id ? "adv-sequence-item--dragging" : ""
-                        } ${isActive ? "adv-sequence-item--active" : ""}`}
-                        style={
-                          isActive
-                            ? ({
-                                "--sequence-step-duration": `${stepDurationMs}ms`,
-                                "--sequence-step-clicks": point.clicks,
-                              } as CSSProperties)
-                            : undefined
-                        }
-                      >
-                        <div className="adv-sequence-leading">
-                          <span className="adv-sequence-index">{index + 1}</span>
-                          <button
-                            type="button"
-                            className="adv-sequence-drag-handle"
-                            aria-label={`${t("advanced.sequenceMoveUp")} / ${t("advanced.sequenceMoveDown")}`}
-                            onPointerDown={(event) => {
-                              event.preventDefault();
-                              const handle = event.currentTarget;
-                              handle.setPointerCapture(event.pointerId);
-                              dragStateRef.current = {
-                                draggedId: point.id,
-                                pointerId: event.pointerId,
-                                latestClientY: event.clientY,
-                                handle,
-                              };
-                              setDraggingId(point.id);
-                            }}
-                          >
-                            <svg
-                              width="16"
-                              height="16"
-                              viewBox="0 0 12 12"
-                              fill="none"
-                              xmlns="http://www.w3.org/2000/svg"
-                              aria-hidden="true"
+                        >
+                          <div className="adv-sequence-leading">
+                            <span className="adv-sequence-index">
+                              {index + 1}
+                            </span>
+                            <button
+                              type="button"
+                              className="adv-sequence-drag-handle"
+                              aria-label={`${t("advanced.sequenceMoveUp")} / ${t("advanced.sequenceMoveDown")}`}
+                              onPointerDown={(event) => {
+                                event.preventDefault();
+                                const handle = event.currentTarget;
+                                handle.setPointerCapture(event.pointerId);
+                                dragStateRef.current = {
+                                  draggedId: point.id,
+                                  pointerId: event.pointerId,
+                                  latestClientY: event.clientY,
+                                  handle,
+                                };
+                                setDraggingId(point.id);
+                              }}
                             >
-                              <path
-                                d="M2 3H10M2 6H10M2 9H10"
-                                stroke="currentColor"
-                                strokeWidth="1.4"
-                                strokeLinecap="round"
-                              />
-                            </svg>
-                          </button>
-                        </div>
-                        <div className="adv-numbox-sm adv-sequence-coord">
-                          <span className="adv-unit adv-axis-label">X</span>
-                          <NumInput
-                            value={point.x}
-                            onChange={(value) =>
-                              updateSequencePoint(index, { x: value })
-                            }
-                            style={{ width: "6ch", textAlign: "right" }}
-                          />
-                        </div>
-                        <div className="adv-numbox-sm adv-sequence-coord">
-                          <span className="adv-unit adv-axis-label">Y</span>
-                          <NumInput
-                            value={point.y}
-                            onChange={(value) =>
-                              updateSequencePoint(index, { y: value })
-                            }
-                            style={{ width: "6ch", textAlign: "right" }}
-                          />
-                        </div>
-                        <div className="adv-numbox-sm adv-sequence-coord adv-sequence-clicks">
-                          <span className="adv-unit adv-axis-label">
-                            {t("advanced.clicksUnit")}
-                          </span>
-                          <NumInput
-                            value={point.clicks}
-                            min={1}
-                            max={1000}
-                            onChange={(value) =>
-                              updateSequencePoint(index, { clicks: value })
-                            }
-                            style={{ width: "4ch", textAlign: "right" }}
-                          />
-                        </div>
-                        <div className="adv-sequence-actions">
-                          <button
-                            type="button"
-                            className="adv-sequence-delete"
-                            onClick={() => deleteSequencePoint(index)}
-                            aria-label={t("advanced.sequenceDelete")}
-                            title={t("advanced.sequenceDelete")}
-                          >
-                            <svg
-                              width="16"
-                              height="16"
-                              viewBox="0 0 12 12"
-                              fill="none"
-                              xmlns="http://www.w3.org/2000/svg"
-                              aria-hidden="true"
+                              <svg
+                                width="16"
+                                height="16"
+                                viewBox="0 0 12 12"
+                                fill="none"
+                                xmlns="http://www.w3.org/2000/svg"
+                                aria-hidden="true"
+                              >
+                                <path
+                                  d="M2 3H10M2 6H10M2 9H10"
+                                  stroke="currentColor"
+                                  strokeWidth="1.4"
+                                  strokeLinecap="round"
+                                />
+                              </svg>
+                            </button>
+                          </div>
+                          <div className="adv-numbox-sm adv-sequence-coord">
+                            <span className="adv-unit adv-axis-label">X</span>
+                            <NumInput
+                              value={point.x}
+                              onChange={(value) =>
+                                updateSequencePoint(index, { x: value })
+                              }
+                              style={{ width: "6ch", textAlign: "right" }}
+                            />
+                          </div>
+                          <div className="adv-numbox-sm adv-sequence-coord">
+                            <span className="adv-unit adv-axis-label">Y</span>
+                            <NumInput
+                              value={point.y}
+                              onChange={(value) =>
+                                updateSequencePoint(index, { y: value })
+                              }
+                              style={{ width: "6ch", textAlign: "right" }}
+                            />
+                          </div>
+                          <div className="adv-numbox-sm adv-sequence-coord adv-sequence-clicks">
+                            <span className="adv-unit adv-axis-label">
+                              {t("advanced.clicksUnit")}
+                            </span>
+                            <NumInput
+                              value={point.clicks}
+                              min={1}
+                              max={1000}
+                              onChange={(value) =>
+                                updateSequencePoint(index, { clicks: value })
+                              }
+                              style={{ width: "4ch", textAlign: "right" }}
+                            />
+                          </div>
+                          <div className="adv-sequence-actions">
+                            <button
+                              type="button"
+                              className="adv-sequence-delete"
+                              onClick={() => deleteSequencePoint(index)}
+                              aria-label={t("advanced.sequenceDelete")}
+                              title={t("advanced.sequenceDelete")}
                             >
-                              <path
-                                d="M2.5 3.5H9.5M4.25 3.5V2.75C4.25 2.34 4.59 2 5 2H7C7.41 2 7.75 2.34 7.75 2.75V3.5M8.75 3.5V9C8.75 9.55 8.3 10 7.75 10H4.25C3.7 10 3.25 9.55 3.25 9V3.5M5 5.25V8.25M7 5.25V8.25"
-                                stroke="currentColor"
-                                strokeWidth="1.1"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                            </svg>
-                          </button>
+                              <svg
+                                width="16"
+                                height="16"
+                                viewBox="0 0 12 12"
+                                fill="none"
+                                xmlns="http://www.w3.org/2000/svg"
+                                aria-hidden="true"
+                              >
+                                <path
+                                  d="M2.5 3.5H9.5M4.25 3.5V2.75C4.25 2.34 4.59 2 5 2H7C7.41 2 7.75 2.34 7.75 2.75V3.5M8.75 3.5V9C8.75 9.55 8.3 10 7.75 10H4.25C3.7 10 3.25 9.55 3.25 9V3.5M5 5.25V8.25M7 5.25V8.25"
+                                  stroke="currentColor"
+                                  strokeWidth="1.1"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              </svg>
+                            </button>
+                          </div>
                         </div>
-                      </div>
                       );
                     },
                   )
                 )}
               </div>
-              {showBottomFade ? <div className="adv-sequence-list-fade" /> : null}
+              {showBottomFade ? (
+                <div className="adv-sequence-list-fade" />
+              ) : null}
             </div>
           </div>
         </div>
