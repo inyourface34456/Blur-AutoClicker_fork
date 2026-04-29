@@ -1,6 +1,10 @@
 import type { ChangeEvent, CSSProperties, FocusEvent, WheelEvent } from "react";
 import "./panels/advanced/AdvancedPanel.css";
 import { RATE_INPUT_MODE_OPTIONS } from "../cadence";
+import {
+  convertDurationToRate,
+  convertRateToDuration,
+} from "../cadence";
 import { normalizeIntegerRaw } from "../numberInput";
 import type { RateInputMode, Settings } from "../store";
 import { useTranslation } from "../i18n";
@@ -118,70 +122,47 @@ function DurationField({
 export default function CadenceInput({ settings, update, variant }: Props) {
   const { t } = useTranslation();
 
-  const INTERVAL_MS: Record<string, number> = {
-    s: 1000,
-    m: 60000,
-    h: 3600000,
-    d: 86400000,
-  };
-
   const switchMode = (mode: RateInputMode) => {
     if (mode === settings.rateInputMode) return;
 
     if (mode === "rate") {
-      const totalMs =
-        ((settings.durationHours * 60 + settings.durationMinutes) * 60 +
-          settings.durationSeconds) *
-          1000 +
-        settings.durationMilliseconds;
-      if (totalMs > 0) {
-        const intervalCandidates = ["s", "m", "h", "d"] as const;
-        let bestInterval: ClickInterval = "s";
-        let bestSpeed = 1;
-        let bestError = Number.POSITIVE_INFINITY;
-
-        for (const interval of intervalCandidates) {
-          const intervalMs = INTERVAL_MS[interval];
-          const speed = Math.max(
-            1,
-            Math.min(500, Math.round(intervalMs / totalMs)),
-          );
-          const actualMs = intervalMs / speed;
-          const error = Math.abs(actualMs - totalMs);
-
-          if (error < bestError) {
-            bestError = error;
-            bestInterval = interval;
-            bestSpeed = speed;
-          }
-        }
-
-        update({
-          rateInputMode: mode,
-          clickInterval: bestInterval,
-          clickSpeed: bestSpeed,
-        });
-      } else {
-        update({ rateInputMode: mode });
-      }
-    } else {
-      const intervalMs = INTERVAL_MS[settings.clickInterval] ?? 1000;
-      const totalMs = intervalMs / settings.clickSpeed;
-      const totalRounded = Math.round(totalMs);
-      const hours = Math.floor(totalRounded / 3_600_000);
-      const remainderAfterHours = totalRounded % 3_600_000;
-      const minutes = Math.floor(remainderAfterHours / 60_000);
-      const remainder = remainderAfterHours % 60_000;
-      const seconds = Math.floor(remainder / 1000);
-      const milliseconds = remainder % 1000;
+      const converted = convertDurationToRate(settings);
       update({
         rateInputMode: mode,
-        durationHours: hours,
-        durationMinutes: minutes,
-        durationSeconds: seconds,
-        durationMilliseconds: milliseconds,
+        ...(converted ?? {}),
       });
+      return;
     }
+
+    const converted = convertRateToDuration(settings);
+    update({
+      rateInputMode: mode,
+      ...(converted ?? {}),
+    });
+  };
+
+  const updateSimpleCadence = (patch: Partial<Settings>) => {
+    if (variant !== "simple") {
+      update(patch);
+      return;
+    }
+
+    const nextSettings = { ...settings, ...patch };
+
+    if (nextSettings.rateInputMode === "rate") {
+      const converted = convertRateToDuration(nextSettings);
+      update({
+        ...patch,
+        ...(converted ?? {}),
+      });
+      return;
+    }
+
+    const converted = convertDurationToRate(nextSettings);
+    update({
+      ...patch,
+      ...(converted ?? {}),
+    });
   };
 
   if (variant === "simple") {
@@ -198,17 +179,17 @@ export default function CadenceInput({ settings, update, variant }: Props) {
               aria-label={t("advanced.clicksPer")}
               onChange={(event) =>
                 handleNumberChange(event, (next) =>
-                  update({ clickSpeed: next }),
+                  updateSimpleCadence({ clickSpeed: next }),
                 )
               }
               onBlur={(event) =>
                 handleNumberBlur(event, 1, 500, (next) =>
-                  update({ clickSpeed: next }),
+                  updateSimpleCadence({ clickSpeed: next }),
                 )
               }
               onWheel={(event) =>
                 handleWheelStep(event, settings.clickSpeed, 1, 500, (next) =>
-                  update({ clickSpeed: next }),
+                  updateSimpleCadence({ clickSpeed: next }),
                 )
               }
             />
@@ -222,7 +203,7 @@ export default function CadenceInput({ settings, update, variant }: Props) {
               options={INTERVAL_OPTIONS}
               allowWindowOverflow
               onChange={(value) =>
-                update({ clickInterval: value as ClickInterval })
+                updateSimpleCadence({ clickInterval: value as ClickInterval })
               }
             />
             <div className="vertical-devider vertical-devider--stretch" />
@@ -241,7 +222,7 @@ export default function CadenceInput({ settings, update, variant }: Props) {
                 value={settings.durationHours}
                 min={0}
                 max={999}
-                onChange={(next) => update({ durationHours: next })}
+                onChange={(next) => updateSimpleCadence({ durationHours: next })}
                 style={{
                   width: dynamicChWidth(settings.durationHours, 1, 3),
                   minWidth: "1ch",
@@ -253,7 +234,9 @@ export default function CadenceInput({ settings, update, variant }: Props) {
                 value={settings.durationMinutes}
                 min={0}
                 max={59}
-                onChange={(next) => update({ durationMinutes: next })}
+                onChange={(next) =>
+                  updateSimpleCadence({ durationMinutes: next })
+                }
                 style={{
                   width: dynamicChWidth(settings.durationMinutes, 1, 2),
                   minWidth: "1ch",
@@ -265,7 +248,9 @@ export default function CadenceInput({ settings, update, variant }: Props) {
                 value={settings.durationSeconds}
                 min={0}
                 max={59}
-                onChange={(next) => update({ durationSeconds: next })}
+                onChange={(next) =>
+                  updateSimpleCadence({ durationSeconds: next })
+                }
                 style={{
                   width: dynamicChWidth(settings.durationSeconds, 1, 2),
                   minWidth: "1ch",
@@ -277,7 +262,9 @@ export default function CadenceInput({ settings, update, variant }: Props) {
                 value={settings.durationMilliseconds}
                 min={0}
                 max={999}
-                onChange={(next) => update({ durationMilliseconds: next })}
+                onChange={(next) =>
+                  updateSimpleCadence({ durationMilliseconds: next })
+                }
                 style={{
                   width: dynamicChWidth(settings.durationMilliseconds, 1, 3),
                   minWidth: "1ch",
